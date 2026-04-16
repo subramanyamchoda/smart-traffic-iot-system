@@ -1,0 +1,271 @@
+from flask import Flask, Response, jsonify
+from flask_cors import CORS
+import cv2
+import requests
+import numpy as np
+import threading
+import datetime
+import time
+
+from detector import detect
+from traffic_logic import get_density, get_time_period
+from speed import estimate_speed
+from database import SessionLocal, engine
+from models import Base, TrafficLog
+from config import ESP32_STREAM
+from signal_controller import update_signal
+
+
+app = Flask(__name__)
+CORS(app)
+
+Base.metadata.create_all(bind=engine)
+
+latest_frame = None
+lock = threading.Lock()
+
+
+traffic_data = {
+    "cars": 0,
+    "bikes": 0,
+    "autos": 0,
+    "buses": 0,
+    "trucks": 0,
+    "total": 0,
+    "signal": "RED",
+    "signal_time": 20,
+    "avg_speed": 0
+}
+
+
+
+
+def save_to_db(counts, density, avg_speed):
+
+    db = SessionLocal()
+
+    hour = datetime.datetime.now().hour
+    period = get_time_period(hour)
+
+    log = TrafficLog(
+        cars=counts["cars"],
+        bikes=counts["bikes"],
+        autos=counts["autos"],
+        buses=counts["buses"],
+        trucks=counts["trucks"],
+        total=counts["total"],
+        density=density,
+        avg_speed=avg_speed,
+        time_period=period
+    )
+
+    db.add(log)
+    db.commit()
+    db.close()
+
+
+
+
+def process_camera():
+
+    global latest_frame
+
+    while True:
+
+        try:
+
+            print("Connecting to ESP32 Camera...")
+
+            stream = requests.get(ESP32_STREAM, stream=True)
+
+            bytes_data = b''
+
+            for chunk in stream.iter_content(chunk_size=4096):
+
+                bytes_data += chunk
+
+                a = bytes_data.find(b'\xff\xd8')
+                b = bytes_data.find(b'\xff\xd9')
+
+                if a != -1 and b != -1:
+
+                    jpg = bytes_data[a:b+2]
+                    bytes_data = bytes_data[b+2:]
+
+                    frame = cv2.imdecode(
+                        np.frombuffer(jpg, dtype=np.uint8),
+                        cv2.IMREAD_COLOR
+                    )
+
+                    if frame is None:
+                        continue
+
+
+                    
+
+                    counts, detections = detect(frame)
+
+                    speeds = []
+
+                    for label, x1, y1, x2, y2 in detections:
+
+                        center = (
+                            int((x1 + x2) / 2),
+                            int((y1 + y2) / 2)
+                        )
+
+                        vid, speed = estimate_speed(center)
+
+                        
+                        if 0 < speed < 120:
+                            speeds.append(speed)
+
+                        cv2.rectangle(
+                            frame,
+                            (x1, y1),
+                            (x2, y2),
+                            (0, 255, 0),
+                            2
+                        )
+
+                        cv2.putText(
+                            frame,
+                            f"{label} {speed} km/h",
+                            (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            (0, 255, 0),
+                            2
+                        )
+
+
+                    
+
+                    if len(speeds) > 0:
+                        avg_speed = sum(speeds) / len(speeds)
+                    else:
+                        avg_speed = 0
+
+                    avg_speed = round(avg_speed, 2)
+
+
+                    
+
+                    density = get_density(counts["total"])
+
+                    signal, signal_time = update_signal(counts["total"])
+
+
+                    
+
+                    traffic_data.update(counts)
+                    traffic_data["signal"] = signal
+                    traffic_data["signal_time"] = signal_time
+                    traffic_data["avg_speed"] = avg_speed
+
+
+                    
+
+                    ret, buffer = cv2.imencode(".jpg", frame)
+
+                    if ret:
+                        with lock:
+                            latest_frame = buffer.tobytes()
+
+
+                    
+
+                    save_to_db(counts, density, avg_speed)
+
+
+        except Exception as e:
+
+            print("Camera Error:", e)
+            time.sleep(3)
+
+
+
+
+@app.route("/api/traffic")
+def traffic():
+    return jsonify(traffic_data)
+
+
+@app.route("/api/traffic/history")
+def history():
+
+    db = SessionLocal()
+
+    logs = db.query(TrafficLog).all()
+
+    data = []
+
+    for log in logs:
+
+        data.append({
+            "id": log.id,
+            "cars": log.cars,
+            "bikes": log.bikes,
+            "autos": log.autos,
+            "buses": log.buses,
+            "trucks": log.trucks,
+            "total": log.total,
+            "density": log.density,
+            "avg_speed": log.avg_speed,
+            "time_period": log.time_period
+        })
+
+    db.close()
+
+    return jsonify(data)
+
+
+
+
+@app.route("/video")
+def video():
+
+    def generate():
+
+        global latest_frame
+
+        while True:
+
+            with lock:
+                frame = latest_frame
+
+            if frame is None:
+                time.sleep(0.03)
+                continue
+
+            yield (
+                b'--frame\r\n'
+                b'Content-Type: image/jpeg\r\n\r\n' +
+                frame +
+                b'\r\n'
+            )
+
+            time.sleep(0.03)
+
+    return Response(
+        generate(),
+        mimetype='multipart/x-mixed-replace; boundary=frame'
+    )
+
+
+
+
+if __name__ == "__main__":
+
+    camera_thread = threading.Thread(target=process_camera)
+    camera_thread.daemon = True
+    camera_thread.start()
+
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        threaded=True
+    )
+    
+    
+    

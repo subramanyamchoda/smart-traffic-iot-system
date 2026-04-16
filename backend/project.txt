@@ -1,0 +1,5 @@
+yolov8 - 
+    High-performance computer vision model developed by Ultralytics for real-time object detection.
+    
+yolov5-
+    Real-time object detection models developed by Ultralytics that are known for their speed.
