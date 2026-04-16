@@ -120,6 +120,12 @@ def process_camera():
 def traffic():
     return jsonify(traffic_data)
 
+@app.route("/")
+def home():
+    return {
+        "status": "success",
+        "message": "Smart Traffic System Connected"
+    }
 
 @app.route("/video")
 def video():
