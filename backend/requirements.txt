@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 flask
 flask-cors
 gunicorn
@@ -10,16 +9,4 @@ ultralytics
 torch
 torchvision
 imutils
-=======
-flask
-flask-cors
-gunicorn
-opencv-python-headless
-numpy
-pillow
-requests
-ultralytics
-torch
-torchvision
-imutils
->>>>>>> 047beefe7d3786c3428ae12e7c36ea18157d8cb9
+
