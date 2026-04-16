@@ -91,7 +91,7 @@ export default function Dashboard() {
             className="lg:col-span-7"
           >
             {/* <CameraFeed stream={VIDEO_STREAM} /> */}
-            <CameraFeed stream="http://localhost:5000/video" />
+            <CameraFeed stream="https://smart-traffic-iot-system.onrender.com/video" />
           </motion.div>
 
           
