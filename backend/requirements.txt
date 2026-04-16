@@ -1,0 +1,14 @@
+flask
+flask-cors
+gunicorn
+
+opencv-python
+numpy
+pillow
+requests
+
+ultralytics
+torch
+torchvision
+
+imutils
