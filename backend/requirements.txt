@@ -1,0 +1,11 @@
+flask
+flask-cors
+gunicorn
+opencv-python-headless
+numpy
+pillow
+requests
+ultralytics
+torch
+torchvision
+imutils
