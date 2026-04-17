@@ -9,4 +9,6 @@ ultralytics
 torch
 torchvision
 imutils
+opencv-python
+
 
