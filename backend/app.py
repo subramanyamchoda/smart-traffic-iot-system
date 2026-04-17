@@ -1,21 +1,14 @@
-from flask import Flask, Response, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+import numpy as np
 import cv2
-import threading
-import time
 
 from detector import detect
-from traffic_logic import get_density
 from speed import estimate_speed
 from signal_controller import update_signal
 
-
 app = Flask(__name__)
 CORS(app)
-
-latest_frame = None
-lock = threading.Lock()
-
 
 traffic_data = {
     "cars": 0,
@@ -30,92 +23,63 @@ traffic_data = {
 }
 
 
-def process_camera():
+@app.route("/process-frame", methods=["POST"])
+def process_frame():
+    try:
+        file = request.files["frame"]
 
-    global latest_frame
+        if not file:
+            return jsonify({"error": "No frame received"})
 
-    cap = cv2.VideoCapture(0)
+        npimg = np.frombuffer(file.read(), np.uint8)
+        frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-    if not cap.isOpened():
-        print("Error: Cannot access webcam")
-        return
+        # ❗ DEBUG CHECK 1
+        if frame is None:
+            return jsonify({"error": "Frame decode failed"})
 
-    # Optional: set resolution
-    cap.set(3, 800)
-    cap.set(4, 600)
+        print("Frame shape:", frame.shape)
 
-    while True:
-        try:
-            ret, frame = cap.read()
+        # 🔥 FORCE SAFE SIZE
+        frame = cv2.resize(frame, (640, 480))
 
-            if not ret:
-                continue
+        # ---------------- DETECTION ----------------
+        counts, detections = detect(frame)
 
-            # Resize for better detection consistency
-            frame = cv2.resize(frame, (800, 600))
+        print("Counts:", counts)
+        print("Detections:", len(detections))
 
-            counts, detections = detect(frame)
+        speeds = []
 
-            speeds = []
+        for label, x1, y1, x2, y2 in detections:
 
-            for label, x1, y1, x2, y2 in detections:
+            cx = (x1 + x2) // 2
+            cy = (y1 + y2) // 2
 
-                center = (
-                    int((x1 + x2) / 2),
-                    int((y1 + y2) / 2)
-                )
+            _, speed = estimate_speed((cx, cy))
 
-                vid, speed = estimate_speed(center)
+            if 0 < speed < 120:
+                speeds.append(speed)
 
-                if 0 < speed < 120:
-                    speeds.append(speed)
+        avg_speed = round(sum(speeds) / len(speeds), 2) if speeds else 0
 
-                # Draw bounding box
-                cv2.rectangle(
-                    frame,
-                    (x1, y1),
-                    (x2, y2),
-                    (0, 255, 0),
-                    2
-                )
+        signal, signal_time = update_signal(counts.get("total", 0))
 
-                # Draw label
-                cv2.putText(
-                    frame,
-                    f"{label.upper()} | {int(speed)} km/h",
-                    (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,
-                    (0, 255, 0),
-                    2
-                )
+        traffic_data.update(counts)
+        traffic_data["signal"] = signal
+        traffic_data["signal_time"] = signal_time
+        traffic_data["avg_speed"] = avg_speed
 
-            # Average speed
-            avg_speed = round(sum(speeds) / len(speeds), 2) if speeds else 0
+        return jsonify({
+            "success": True,
+            "counts": counts,
+            "detections": len(detections)
+        })
 
-            density = get_density(counts["total"])
-            signal, signal_time = update_signal(counts["total"])
-
-            # Update live data
-            traffic_data.update(counts)
-            traffic_data["signal"] = signal
-            traffic_data["signal_time"] = signal_time
-            traffic_data["avg_speed"] = avg_speed
-
-            # Encode frame
-            ret, buffer = cv2.imencode(".jpg", frame)
-
-            if ret:
-                with lock:
-                    latest_frame = buffer.tobytes()
-
-            time.sleep(0.03)
-
-        except Exception as e:
-            print("Camera Error:", e)
-            time.sleep(1)
-
-
+    except Exception as e:
+        print("ERROR:", e)
+        return jsonify({"success": False, "error": str(e)})
+        
 @app.route("/api/traffic")
 def traffic():
     return jsonify(traffic_data)
@@ -127,43 +91,5 @@ def home():
         "message": "Smart Traffic System Connected"
     }
 
-@app.route("/video")
-def video():
-
-    def generate():
-        global latest_frame
-
-        while True:
-            with lock:
-                frame = latest_frame
-
-            if frame is None:
-                time.sleep(0.03)
-                continue
-
-            yield (
-                b'--frame\r\n'
-                b'Content-Type: image/jpeg\r\n\r\n' +
-                frame +
-                b'\r\n'
-            )
-
-            time.sleep(0.03)
-
-    return Response(
-        generate(),
-        mimetype='multipart/x-mixed-replace; boundary=frame'
-    )
-
-
 if __name__ == "__main__":
-
-    camera_thread = threading.Thread(target=process_camera)
-    camera_thread.daemon = True
-    camera_thread.start()
-
-    app.run(
-        host="0.0.0.0",
-        port=5000,
-        threaded=True
-    )
+    app.run(debug=True, port=5000)

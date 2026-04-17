@@ -1,84 +1,163 @@
-import { motion } from "framer-motion";
-import { Camera, Maximize2, Circle, Activity } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import axios from "axios";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Camera,
+  Scan,
+  AlertTriangle,
+  CheckCircle,
+  Activity,
+  Gauge
+} from "lucide-react";
 
-export default function CameraFeed({ stream }) {
+export default function CameraFeed() {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  const [status] = useState("LIVE"); // ❌ no blinking state changes
+  const [detections, setDetections] = useState(0);
+  const [fps] = useState(30); // fixed display (no re-render loop)
+
+  useEffect(() => {
+    let stream;
+    let interval;
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+
+        const video = videoRef.current;
+        video.srcObject = stream;
+        await video.play();
+
+        interval = setInterval(() => {
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+
+          if (!video || !canvas) return;
+          if (!video.videoWidth) return;
+
+          const ctx = canvas.getContext("2d");
+
+          canvas.width = 640;
+          canvas.height = 480;
+
+          ctx.drawImage(video, 0, 0, 640, 480);
+
+          canvas.toBlob(async (blob) => {
+            if (!blob) return;
+
+            const formData = new FormData();
+            formData.append("frame", blob, "frame.jpg");
+
+            try {
+              const res = await axios.post(
+                "https://smart-traffic-iot-system.onrender.com/process-frame",
+                formData
+              );
+
+              // 🔥 only update detection (NO STATUS CHANGE)
+              setDetections(res.data?.detections || 0);
+
+            } catch (err) {
+              console.log("Backend error");
+            }
+          }, "image/jpeg", 0.7);
+
+        }, 900); // slower = stable UI
+
+      } catch (err) {
+        console.log("Camera blocked");
+      }
+    }
+
+    startCamera();
+
+    return () => {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      if (interval) clearInterval(interval);
+    };
+  }, []);
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="relative group bg-slate-900/80 backdrop-blur-md border border-slate-700/50 p-5 rounded-3xl shadow-2xl overflow-hidden"
-    >
-      
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-500/10 rounded-lg">
-            <Camera className="w-5 h-5 text-indigo-400" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-white uppercase tracking-tighter">
-              Live Traffic Feed
-            </h2>
-            <div className="flex items-center gap-1.5">
-              <motion.div
-                animate={{ opacity: [1, 0.4, 1] }}
-                transition={{ repeat: Infinity, duration: 1.5 }}
-              >
-                <Circle className="w-2 h-2 fill-red-500 text-red-500" />
-              </motion.div>
-              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">
-                Recording • Cam_01
-              </span>
-            </div>
-          </div>
-        </div>
-        
-        <button className="p-2 hover:bg-slate-700/50 rounded-full transition-colors">
-          <Maximize2 className="w-4 h-4 text-slate-400" />
-        </button>
+    <div className="relative w-full max-w-5xl mx-auto rounded-3xl overflow-hidden border border-slate-700 shadow-2xl bg-black">
+
+      {/* CAMERA */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="w-full aspect-video object-cover"
+      />
+
+      <canvas ref={canvasRef} className="hidden" />
+
+      {/* GRID */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(0,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,255,255,0.04)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
+
+      {/* SCAN FRAME */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[70%] h-[70%] border border-cyan-400/30 rounded-2xl" />
       </div>
 
-      
-      <div className="relative rounded-2xl overflow-hidden border border-slate-800 shadow-inner group-hover:border-indigo-500/30 transition-colors duration-500">
-        
-        
-        <motion.div 
-          initial={{ y: "-100%" }}
-          animate={{ y: "100%" }}
-          transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
-          className="absolute inset-0 z-10 w-full h-[2px] bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent"
-        />
+      {/* TOP BAR */}
+      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-gradient-to-b from-black/80">
 
-        
-        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
-            <span className="bg-black/60 backdrop-blur-md text-[10px] font-mono text-white px-2 py-1 rounded border border-white/10">
-               1080P | 60FPS
-            </span>
+        <div className="flex items-center gap-2">
+          <Camera className="text-cyan-400 w-5 h-5" />
+          <span className="text-white font-bold text-sm">
+            AI TRAFFIC MONITOR
+          </span>
         </div>
 
-        <div className="absolute bottom-4 left-4 z-20">
-          <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/5">
-             <Activity className="w-3 h-3 text-emerald-400" />
-             <span className="text-[10px] font-mono text-emerald-400 font-bold">STABLE CONNECTION</span>
+        <div className="flex items-center gap-2 text-xs text-slate-300">
+          <Activity className="w-4 h-4 text-cyan-400" />
+          STABLE FEED
+        </div>
+
+      </div>
+
+      {/* RIGHT DOTS */}
+      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+        <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+        <div className="w-2 h-2 bg-cyan-500 rounded-full" />
+        <div className="w-2 h-2 bg-cyan-300 rounded-full animate-pulse" />
+      </div>
+
+      {/* BOTTOM HUD */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 flex justify-between items-center">
+
+        {/* STATUS (NO BLINK) */}
+        <div className="flex items-center gap-2 text-green-400 font-bold text-sm">
+          <CheckCircle className="w-4 h-4" />
+          LIVE
+        </div>
+
+        {/* DETECTIONS */}
+        <div className="text-white text-sm flex items-center gap-2">
+          <Scan className="w-4 h-4 text-cyan-400" />
+          Vehicles:
+          <span className="text-cyan-400 font-bold text-lg">
+            {detections}
+          </span>
+        </div>
+
+        {/* INTENSITY BAR */}
+        <div className="flex items-center gap-2">
+          <Gauge className="text-cyan-400 w-4 h-4" />
+          <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-cyan-400 transition-all duration-500"
+              style={{ width: `${Math.min(detections * 10, 100)}%` }}
+            />
           </div>
         </div>
 
-        
-        <img
-          src={stream}
-          alt="camera"
-          className="w-full aspect-video object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-700 scale-100 group-hover:scale-105"
-        />
-
-        
-        <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-white/20 rounded-tl" />
-        <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-white/20 rounded-tr" />
-        <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-white/20 rounded-bl" />
-        <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-white/20 rounded-br" />
       </div>
-
-      
-      <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-indigo-600/10 blur-[50px] rounded-full -z-10" />
-    </motion.div>
+    </div>
   );
 }

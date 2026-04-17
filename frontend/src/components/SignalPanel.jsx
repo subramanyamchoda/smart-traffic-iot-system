@@ -14,7 +14,7 @@ export default function SignalPannel() {
 
     const fetchTraffic = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/traffic");
+        const res = await fetch("https://smart-traffic-iot-system.onrender.com/api/traffic");
         const data = await res.json();
         setTraffic(data);
       } catch (err) {

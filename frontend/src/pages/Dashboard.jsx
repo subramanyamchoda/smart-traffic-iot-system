@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { getTraffic, VIDEO_STREAM } from "../services/api";
+import { motion } from "framer-motion";
+import { getTraffic } from "../services/api";
 
 import CameraFeed from "../components/CameraFeed";
 import VehicleCard from "../components/VehicleCard";
 import SignalPanel from "../components/SignalPanel";
 import Charts from "../components/Charts";
 
-import { Car, Bike, Bus, Truck, CircleDot, LayoutDashboard, Activity } from "lucide-react";
+import {
+  Car,
+  Bike,
+  Bus,
+  Truck,
+  LayoutDashboard,
+  Activity
+} from "lucide-react";
 
 export default function Dashboard() {
   const [traffic, setTraffic] = useState({
@@ -21,18 +28,16 @@ export default function Dashboard() {
     avg_speed: 0
   });
 
-  
   useEffect(() => {
     const interval = setInterval(() => {
-      getTraffic().then(res => {
-        setTraffic(res.data);
-      }).catch(err => console.error("API Error:", err));
+      getTraffic()
+        .then(res => setTraffic(res.data))
+        .catch(err => console.error("API Error:", err));
     }, 2000);
 
     return () => clearInterval(interval);
   }, []);
 
-  
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -42,60 +47,60 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-200 selection:bg-indigo-500/30 font-sans overflow-x-hidden">
-      
+    <div className="min-h-screen bg-[#020617] text-slate-200 font-sans overflow-x-hidden">
+
+      {/* BACKGROUND GLOW */}
       <div className="fixed inset-0 z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-900/20 blur-[120px]" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-900/10 blur-[120px]" />
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto p-6 lg:p-10">
-        
-        
-        <header className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6">
-          <motion.div 
-            initial={{ x: -20, opacity: 0 }} 
-            animate={{ x: 0, opacity: 1 }}
-          >
+
+        {/* HEADER */}
+        <header className="flex flex-col md:flex-row justify-between mb-12 gap-6">
+
+          <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}>
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-indigo-500 rounded-xl shadow-[0_0_20px_rgba(99,102,241,0.5)]">
+              <div className="p-2 bg-indigo-500 rounded-xl">
                 <LayoutDashboard className="text-white w-6 h-6" />
               </div>
-              <span className="text-indigo-400 font-bold tracking-[0.2em] text-xs uppercase">Intelligent Systems</span>
+              <span className="text-indigo-400 font-bold tracking-[0.2em] text-xs uppercase">
+                Intelligent Systems
+              </span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-white">
+
+            <h1 className="text-4xl md:text-5xl font-black text-white">
               Smart Traffic <span className="text-indigo-500">Dashboard</span>
             </h1>
           </motion.div>
 
-          <motion.div 
-            initial={{ x: 20, opacity: 0 }} 
+          <motion.div
+            initial={{ x: 20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className="flex items-center gap-4 bg-slate-900/50 border border-slate-800 p-4 rounded-2xl backdrop-blur-md"
+            className="flex items-center gap-4 bg-slate-900/50 border border-slate-800 p-4 rounded-2xl"
           >
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">System Status</span>
-              <span className="text-emerald-400 font-mono font-bold flex items-center gap-2">
-                <Activity className="w-4 h-4 animate-pulse" /> LIVE ANALYTICS
-              </span>
-            </div>
+            <Activity className="w-4 h-4 text-green-400 animate-pulse" />
+            <span className="text-green-400 font-bold text-sm">
+              LIVE ANALYTICS
+            </span>
           </motion.div>
         </header>
 
-        
+        {/* MAIN GRID */}
         <div className="grid lg:grid-cols-12 gap-8 mb-8">
-          
-          <motion.div 
+
+          {/* CAMERA FEED (WEBCAM) */}
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="lg:col-span-7"
           >
-            {/* <CameraFeed stream={VIDEO_STREAM} /> */}
-            <CameraFeed stream="https://smart-traffic-iot-system.onrender.com/video" />
+            <CameraFeed />
           </motion.div>
 
-          
-          <motion.div 
+          {/* VEHICLE CARDS */}
+          <motion.div
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -103,15 +108,13 @@ export default function Dashboard() {
           >
             <VehicleCard title="Cars" value={traffic.cars} icon={<Car />} />
             <VehicleCard title="Bikes" value={traffic.bikes} icon={<Bike />} />
-            <VehicleCard title="Heavy Trucks" value={traffic.trucks} icon={<Truck />} />
-            
+            <VehicleCard title="Trucks" value={traffic.trucks} icon={<Truck />} />
             <VehicleCard title="Buses" value={traffic.buses} icon={<Bus />} />
-           
           </motion.div>
         </div>
 
-        
-        <motion.div 
+        {/* SIGNAL PANEL */}
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
@@ -124,8 +127,8 @@ export default function Dashboard() {
           />
         </motion.div>
 
-        
-        <motion.div 
+        {/* CHARTS */}
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
@@ -133,14 +136,14 @@ export default function Dashboard() {
           <Charts traffic={traffic} />
         </motion.div>
 
-        
-        <footer className="mt-16 py-8 border-t border-slate-800/50 flex flex-col md:flex-row justify-between items-center text-slate-500 text-sm gap-4">
-          <p>© 2026 • AI Traffic Management System</p>
-          <div className="flex gap-6">
-            <span className="hover:text-indigo-400 cursor-pointer transition-colors">Done by Subbu</span>
-            <span className="hover:text-indigo-400 cursor-pointer transition-colors"></span>
-          </div>
+        {/* FOOTER */}
+        <footer className="mt-16 py-8 border-t border-slate-800 text-slate-500 text-sm flex justify-between">
+          <p>© 2026 AI Traffic Management System</p>
+          <span className="hover:text-indigo-400 cursor-pointer">
+            Done by Subbu
+          </span>
         </footer>
+
       </div>
     </div>
   );
