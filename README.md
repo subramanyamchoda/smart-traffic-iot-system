@@ -1,7 +1,7 @@
 # 🚦 Smart Traffic Management System (Feature 1 - IoT Based)
 
 🔗 **Live Demo:**  
-👉 [\[link for webiste\]](https://smart-traffic-iot-system.vercel.app/)
+👉 https://smart-traffic-iot-system.vercel.app
 
 ---
 
