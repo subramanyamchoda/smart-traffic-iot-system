@@ -11,7 +11,7 @@ from signal_controller import update_signal
 
 app = Flask(__name__)
 
-# ✅ CLEAN CORS SETUP (ONLY ONCE)
+# ✅ CLEAN CORS (ONLY ONCE)
 CORS(app, resources={
     r"/*": {
         "origins": [
@@ -48,7 +48,10 @@ def process_frame():
 
         last_time = time.time()
 
-        file = request.files["frame"]
+        file = request.files.get("frame")
+        if not file:
+            return jsonify({"error": "No frame received"})
+
         npimg = np.frombuffer(file.read(), np.uint8)
         frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
@@ -100,8 +103,5 @@ def home():
 
 
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        debug=False
-    )
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=False)
