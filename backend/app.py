@@ -11,7 +11,16 @@ from signal_controller import update_signal
 
 app = Flask(__name__)
 
-CORS(app, origins="*")
+# ✅ CLEAN CORS SETUP (ONLY ONCE)
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "https://smart-traffic-iot-system.vercel.app",
+            "http://localhost:3000"
+        ]
+    }
+})
+
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 traffic_data = {
