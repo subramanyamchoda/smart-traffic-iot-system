@@ -11,16 +11,10 @@ from signal_controller import update_signal
 
 app = Flask(__name__)
 
-# ✅ CLEAN CORS (ONLY ONCE)
-CORS(app, resources={
-    r"/*": {
-        "origins": [
-            "https://smart-traffic-iot-system.vercel.app",
-            "http://localhost:3000"
-        ]
-    }
-})
+# ✅ FIX 1: SIMPLE GLOBAL CORS (IMPORTANT FOR RENDER)
+CORS(app, supports_credentials=True)
 
+# ✅ FIX 2: MAX FILE SIZE
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 traffic_data = {
@@ -38,11 +32,18 @@ traffic_data = {
 last_time = 0
 
 
-@app.route("/process-frame", methods=["POST"])
+# ✅ FIX 3: HANDLE PRE-FLIGHT REQUESTS (CORS CRITICAL)
+@app.route("/process-frame", methods=["POST", "OPTIONS"])
 def process_frame():
+
+    # Handle OPTIONS request (CORS preflight)
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+
     global last_time
 
     try:
+        # rate limit (avoid overload)
         if time.time() - last_time < 0.5:
             return jsonify({"status": "skipped"})
 
@@ -50,16 +51,17 @@ def process_frame():
 
         file = request.files.get("frame")
         if not file:
-            return jsonify({"error": "No frame received"})
+            return jsonify({"error": "No frame received"}), 400
 
         npimg = np.frombuffer(file.read(), np.uint8)
         frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
         if frame is None:
-            return jsonify({"error": "decode failed"})
+            return jsonify({"error": "decode failed"}), 400
 
         frame = cv2.resize(frame, (640, 480))
 
+        # ---------------- DETECTION ----------------
         counts, detections = detect(frame)
 
         speeds = []
@@ -79,7 +81,7 @@ def process_frame():
         traffic_data["signal"] = signal
         traffic_data["signal_time"] = signal_time
 
-        return jsonify({
+        response = jsonify({
             "success": True,
             "counts": counts,
             "detections": len(detections),
@@ -88,13 +90,20 @@ def process_frame():
             "signal_time": signal_time
         })
 
+        # ✅ FIX 4: FORCE CORS HEADERS (IMPORTANT ON RENDER)
+        response.headers.add("Access-Control-Allow-Origin", "*")
+
+        return response
+
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route("/api/traffic")
 def traffic():
-    return jsonify(traffic_data)
+    response = jsonify(traffic_data)
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    return response
 
 
 @app.route("/")
@@ -102,6 +111,7 @@ def home():
     return {"status": "ok"}
 
 
+# ✅ FIX 5: RENDER PORT SUPPORT
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port, debug=False)

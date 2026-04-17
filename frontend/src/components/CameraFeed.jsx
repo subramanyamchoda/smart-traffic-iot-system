@@ -1,22 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Camera,
   Scan,
-  AlertTriangle,
   CheckCircle,
-  Activity,
-  Gauge
+  Gauge,
+  Activity
 } from "lucide-react";
 
 export default function CameraFeed() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
-  const [status] = useState("LIVE"); // ❌ no blinking state changes
   const [detections, setDetections] = useState(0);
-  const [fps] = useState(30); // fixed display (no re-render loop)
+  const [status] = useState("LIVE");
 
   useEffect(() => {
     let stream;
@@ -33,12 +31,14 @@ export default function CameraFeed() {
         video.srcObject = stream;
         await video.play();
 
+        // 📡 Send frames to backend
         interval = setInterval(() => {
           const video = videoRef.current;
           const canvas = canvasRef.current;
 
           if (!video || !canvas) return;
           if (!video.videoWidth) return;
+          if (video.readyState < 2) return;
 
           const ctx = canvas.getContext("2d");
 
@@ -59,18 +59,21 @@ export default function CameraFeed() {
                 formData
               );
 
-              // 🔥 only update detection (NO STATUS CHANGE)
-              setDetections(res.data?.detections || 0);
+              // ✔ safe update only
+              if (res.data?.detections !== undefined) {
+                setDetections(res.data.detections);
+              }
 
             } catch (err) {
-              console.log("Backend error");
+              console.log("Backend error:", err.message);
             }
+
           }, "image/jpeg", 0.7);
 
-        }, 900); // slower = stable UI
+        }, 1200); // 🔥 SAFE FOR RENDER
 
       } catch (err) {
-        console.log("Camera blocked");
+        console.log("Camera error:", err);
       }
     }
 
@@ -85,7 +88,7 @@ export default function CameraFeed() {
   return (
     <div className="relative w-full max-w-5xl mx-auto rounded-3xl overflow-hidden border border-slate-700 shadow-2xl bg-black">
 
-      {/* CAMERA */}
+      {/* VIDEO FEED */}
       <video
         ref={videoRef}
         autoPlay
@@ -94,15 +97,11 @@ export default function CameraFeed() {
         className="w-full aspect-video object-cover"
       />
 
+      {/* HIDDEN CANVAS */}
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* GRID */}
+      {/* GRID OVERLAY */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(0,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,255,255,0.04)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
-
-      {/* SCAN FRAME */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[70%] h-[70%] border border-cyan-400/30 rounded-2xl" />
-      </div>
 
       {/* TOP BAR */}
       <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-gradient-to-b from-black/80">
@@ -116,12 +115,17 @@ export default function CameraFeed() {
 
         <div className="flex items-center gap-2 text-xs text-slate-300">
           <Activity className="w-4 h-4 text-cyan-400" />
-          STABLE FEED
+          LIVE FEED
         </div>
 
       </div>
 
-      {/* RIGHT DOTS */}
+      {/* SCAN FRAME */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[70%] h-[70%] border border-cyan-400/30 rounded-2xl" />
+      </div>
+
+      {/* RIGHT SIDE INDICATORS */}
       <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
         <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
         <div className="w-2 h-2 bg-cyan-500 rounded-full" />
@@ -131,10 +135,10 @@ export default function CameraFeed() {
       {/* BOTTOM HUD */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 flex justify-between items-center">
 
-        {/* STATUS (NO BLINK) */}
+        {/* STATUS */}
         <div className="flex items-center gap-2 text-green-400 font-bold text-sm">
           <CheckCircle className="w-4 h-4" />
-          LIVE
+          {status}
         </div>
 
         {/* DETECTIONS */}
